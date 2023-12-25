@@ -134,9 +134,6 @@ class DeepQAgent():
             print(f"Episode {i} \nTotal loss of episode {total_loss/j}")
             print(f"Length of episode {j}")
             print(f"Total reward of episode {total_reward}")
-            print(f"Max q value seen {self.max_q}")
-            print(f"Min q value seen {self.min_q}")
-            print(f"Mean q values {np.mean(self.target_q_vals)}")
             print(f"Action dict {action_dict}")
             print(f"epsilon {self.epsilon}")
             print(f"mean_reward {np.mean(rewards[-10:])}")
@@ -164,7 +161,7 @@ class DeepQAgent():
             samples = None
 
         if samples is not None:
-            y = torch.tensor([self.get_target(el) for el in samples])
+            y = self.get_target(samples)
             x = self.preprocess([el.state for el in samples])
         
             actions = torch.tensor([int(el.action) for el in samples])
@@ -193,22 +190,16 @@ class DeepQAgent():
             moved_items.append(item)
         return moved_items
 
-    def get_target(self, item: BufferItem):
-        #TODO allow for batch processing
-        if item.done:
-            return float(item.reward)
-        else:
-            with torch.no_grad():
-                x = self.preprocess([item.next_state])
-                pred = self.target_net(x)[0]
-                q_targ = torch.max(pred)
-                for el in pred.cpu().detach().numpy():
-                    self.target_q_vals.append(el)
-                if q_targ>self.max_q:
-                    self.max_q = q_targ
-                if q_targ<self.min_q:
-                    self.min_q = q_targ
-                return (item.reward + self.gamma * q_targ)
+    def get_target(self, items: [BufferItem]):
+        done = [el.done for el in items]
+        not_done = torch.where(torch.tensor(done), torch.tensor(0.0), torch.tensor(1.0)).float().cuda()
+        states = [el.next_state for el in items]
+        rewards = self.send_to_cuda([torch.as_tensor([el.reward for el in items])])[0].float()
+        with torch.no_grad():
+            x = self.preprocess(states)
+            pred = self.target_net(x)
+            q_targ = pred.max(dim=1).values
+            return rewards + not_done * self.gamma * q_targ
 
     def preprocess(self, x):
         '''preprocesses a batch of images that are in channel_last format

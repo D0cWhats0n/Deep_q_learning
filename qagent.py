@@ -102,7 +102,7 @@ class Qagent():
             pickle.dump(self.q_values, file)
             print(f"Saved agent's q-values to {self.save_dir}")
 
-    def load(self):
+    def load_model(self):
         if self.save_path.exists():
             with open(self.save_path, "rb") as file:
                 self.q_values = pickle.load(file)
